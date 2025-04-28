@@ -1,0 +1,572 @@
+---
+title: "Propensity Score"
+author: "Dylan Armbruster"
+format: html
+editor: visual
+toc: True
+---
+
+# Introduction
+
+In *League of Legends*, the Tank class of champions is frequently the subject of design complaints from players, who often cite frustration over Tanks’ combination of high durability and strong in-game presence. Despite Tanks typically having lower offensive capabilities, their high base defensive stats can make them feel overwhelmingly powerful, especially if they are still able to deal significant damage. This study investigates whether being assigned to the Tank class is associated with an increased champion win rate, after controlling for baseline durability stats such as health and armor. To address potential confounding factors and estimate the causal effect of being a Tank, we introduce and apply Propensity Score Matching (PSM) methods. This approach allows for a more balanced comparison between Tank and non-Tank champions, helping to better isolate the impact of class assignment on competitive success.
+
+For any hypothesis test, an $\alpha =$ is assumed. In the case of multiple testing, correction for mutliple tests will be used.
+
+Software:
+
+R version 4.4.1 (2024-06-14)
+
+## Propensity Score
+
+A propensity score is the conditional probability that a subject receives the treatment, given their observed characteristics (covariates) x. Written as, $P(Z = 1 | x)$ where Z is the label for what treatment someone was assigned to. Formally, if we consider a group (or "stratum") s with $n_{s}$ individuals, and each individual i has a treatment probability $\pi_{si}$, then the average probability across the group is:
+
+$\lambda(x_{s}) = \frac{1}{n} \sum_{i = 1} \pi_{si}$
+
+Here, $\lambda(x_s)$ is the overall chance that a randomly selected subject from stratum s receives the treatment. This value always lies between 0 and 1.
+
+Think of a propensity score as a way to summarize, in one number, how likely someone is to get a treatment based on their background information. Instead of looking at all their details separately, we bundle it into a single probability. Imagine, "given who you are, there's a 70% chance you would have been treated." Now, we don't have to try and make comparable groups based on background information, now we can just focus on matching propensity score values.
+
+Origin?
+
+Paul Rosenbaum and Donald Rubin
+
+### Motivation
+
+In the design of experiments, *randomization* plays a central role. It is different from *random sampling* in survey design. Randomization ensures that, on average, every subject has the same probability of being assigned to the treatment group. This process not only guarantees valid standard errors but also justifies the use of Fisher’s significance tests. Most importantly, randomization provides an unbiased estimate of the treatment effect.
+
+Now, consider if we could replicate this mechanism in an observational study - creating groups of subjects who have similar probabilities of receiving treatment. Under a key assumption known as *strong ignorability*, we can approximate the conditions of a randomized experiment. If strong ignorability holds, the estimated Average Treatment Effect (ATE) from the observational study would also be unbiased.
+
+### Propensity Score Matching
+
+Using Propensity Scores
+
+One of the most popular R package
+
+<https://cran.r-project.org/web/packages/MatchIt/vignettes/MatchIt.html>
+
+<https://cran.r-project.org/web/packages/MatchIt/vignettes/matching-methods.html>
+
+```{r, include = F, warning = F}
+
+# Libraries
+
+library(tidyverse)  # dplyr, ggplot 
+library(GGally)     # ggpairs 
+library(MatchIt)    # matchit, lalonde data set 
+library(readr)      # read csv 
+library(dagitty)    # DAG 
+library(DiagrammeR) # Identity
+library(tinytable)  # table
+library(marginaleffects)
+library(optmatch)
+```
+
+```{r, echo = F}
+
+tinytable::tt(lalonde[1:8, 1:8])
+```
+
+```{r, echo = F}
+# No matching; constructing a pre-match matchit object
+
+m.out0 = matchit(treat ~ age + educ + race + married + 
+                    nodegree + re74 + re75,
+                  data = lalonde,
+                  method = NULL,
+                  distance = "glm")
+
+# Checking balance prior to matching
+
+summary(m.out0)
+```
+
+```{r, echo = F}
+
+# 1:1 NN PS matching w/o replacement
+
+m.out1 = matchit(treat ~ age + educ + race + married + 
+                    nodegree + re74 + re75,
+                  data = lalonde,
+                  method = "nearest",
+                  distance = "glm")
+
+# Checking balance after NN matching
+
+summary(m.out1, un = FALSE)
+
+plot(m.out1, type = "jitter", interactive = FALSE)
+
+plot(m.out1, type = "density", interactive = FALSE,
+     which.xs = ~age + married + re75)
+
+plot(summary(m.out1))
+```
+
+## Methods
+
+-   Estimand: $ATE = E[Y(i =1) - Y(i = 0)]$ where $Y(i = 1)$ = win rate if the champion were a Tank and $Y( i = 0)$ = win rate if the champion were not a Tank.
+
+-   Target Population: League of Legends Champions
+
+-   Matching Method Discussion
+
+## Assumptions:
+
+```{r, echo = F}
+
+# DAG
+
+causal_diagram1 = dagitty::dagitty('dag {
+bb="0,0,1,1"
+"Win Rate" [outcome,pos="0.824,0.612"]
+"armor per lvl" [pos="0.631,0.344"]
+"attack damage" [pos="0.496,0.756"]
+"attack speed" [pos="0.501,0.680"]
+"base armor" [pos="0.272,0.263"]
+"base hp" [pos="0.499,0.237"]
+"base magic resistance" [pos="0.379,0.869"]
+"hp per lvl" [pos="0.424,0.352"]
+"hp regeneration" [pos="0.660,0.198"]
+"magic resistance per lvl" [pos="0.240,0.389"]
+"movement speed" [pos="0.279,0.093"]
+"resource type" [pos="0.527,0.468"]
+Class [exposure,pos="0.192,0.619"]
+"armor per lvl" -> "Win Rate"
+"armor per lvl" -> Class
+"attack damage" -> "Win Rate"
+"attack damage" -> Class
+"attack speed" -> "Win Rate"
+"attack speed" -> Class
+"base armor" -> "Win Rate"
+"base armor" -> Class
+"base hp" -> "Win Rate"
+"base hp" -> Class
+"base magic resistance" -> "Win Rate"
+"base magic resistance" -> Class
+"hp per lvl" -> "Win Rate"
+"hp per lvl" -> Class
+"hp regeneration" -> "Win Rate"
+"hp regeneration" -> Class
+"magic resistance per lvl" -> "Win Rate"
+"magic resistance per lvl" -> Class
+"movement speed" -> "Win Rate"
+"movement speed" -> Class
+"resource type" -> "Win Rate"
+"resource type" -> Class
+ }
+
+')
+
+# Plot DAG
+
+plot(causal_diagram1)
+```
+
+-   Unconfoundedness
+
+-   Positivity
+
+-   SUTVA
+
+## Data Pre-Processing
+
+```{r, echo = F}
+
+# Data Pre-Processing of champion stats and champion outcomes
+
+## Pull in the data set:
+
+champion_outcomes = readr::read_csv(
+  file = "League_Dataset - League of Legends Champion Stats 12.1.csv"
+)
+
+champion_stat = readr::read_csv(
+  file = "Lol_Champions.csv"
+)
+
+champion_outcomes = janitor::clean_names(champion_outcomes)
+
+champion_stat = janitor::clean_names(champion_stat)
+
+## NA's:
+
+# sum(is.na(champion_outcomes) ) # 1
+
+# sum(is.na(champion_stat) )     # 7
+
+# nrow(champion_outcomes)        # 232
+
+# nrow(champion_stat)            # 167
+
+## Full Join data sets:
+
+League = full_join(
+  y = champion_outcomes,
+  x = champion_stat,
+  by = "name"
+)
+
+## Inspect for NA's:
+
+# sum(is.na(League) ) # 141
+
+
+## Filter out new champions with missing outcome data
+
+League = League |> 
+    filter(
+        !(name %in% c(
+            "Bel'Veth",
+            "Briar",
+            "Hwei",
+            "K'Sante",
+            "Milio",
+            "Naafiri",
+            "Nunu",
+            "Renata Glasc",
+            "Smolder",
+            "Zeri",
+            "Nilah"
+        )
+      )
+    )
+
+## Check for missing values
+
+# sum(is.na(League)) # 30
+
+## Because there are still missing values, inspect which rows contain them
+
+# view(
+#   League |> 
+#     filter(if_any(everything(), is.na))
+# )
+
+## Fill in missing values for Nunu from wiki league
+
+League = League |>
+  mutate(
+    class = ifelse(name == "Nunu & Willump" & is.na(class), "Tank", class),
+    role.x = ifelse(name == "Nunu & Willump" & is.na(role.x), "JUNGLE", role.x),
+    tier = ifelse(name == "Nunu & Willump" & is.na(tier), "A", tier),
+    score = ifelse(name == "Nunu & Willump" & is.na(score), 55.47, score),
+    trend = ifelse(name == "Nunu & Willump" & is.na(trend), 0.61, trend),
+    win_percent = ifelse(name == "Nunu & Willump" & is.na(win_percent), "51.79%", win_percent),
+    role_percent = ifelse(name == "Nunu & Willump" & is.na(role_percent), "89.52%", role_percent),
+    pick_percent = ifelse(name == "Nunu & Willump" & is.na(pick_percent), "4.35%", pick_percent),
+    ban_percent = ifelse(name == "Nunu & Willump" & is.na(ban_percent), "2.38%", ban_percent),
+    kda = ifelse(name == "Nunu & Willump" & is.na(kda), 2.79, kda),
+    role.y = ifelse(name == "Nunu & Willump" & is.na(role.y), "Jungle", role.y)
+  )
+
+## Fill in missing values
+
+League = League |>
+  mutate(
+    resourse_type = ifelse(name == "Dr. Mundo" & is.na(resourse_type), "Health", resourse_type),
+    resourse_type = ifelse(name == "Garen" & is.na(resourse_type), 0, resourse_type),
+    resourse_type = ifelse(name == "Katarina" & is.na(resourse_type), 0, resourse_type),
+    resourse_type = ifelse(name == "Viego" & is.na(resourse_type), 0, resourse_type),
+    resourse_type = ifelse(name == "Zac" & is.na(resourse_type), "Health", resourse_type),
+    resourse_type = ifelse(name == "Riven" & is.na(resourse_type), 0, resourse_type),
+    class = ifelse(name == "Lillia" & is.na(class), "Mage", class)
+  )
+
+# view(
+#   League |> 
+#     filter(if_any(everything(), is.na))
+# ) # empty
+
+## create a new field for Treatment Assignment. Tank = 1, Non-Tank = 0
+
+League = League |> 
+  mutate(
+    treatment = as.factor(ifelse(class == "Tank",1,0) )
+  )
+
+# convert strings to numerics
+
+League$win_percent = as.numeric(sub("%","",League$win_percent) ) / 100
+
+League$pick_percent = as.numeric(sub("%","",League$pick_percent) ) / 100
+
+## Show data set
+
+tinytable::tt(League[1:8, 1:35] )
+```
+
+## Check Imbalances
+
+```{r, echo = F}
+
+# No matching; constructing a pre-match matchit object
+
+m.out0 = MatchIt::matchit(treatment ~ mana_regeneration + base_hp + attack_range + movement_speed + base_mana + base_armor + resourse_type + hp_regeneration,
+                 data = League,
+                  method = NULL,
+                  distance = "glm")
+
+# Checking balance prior to matching
+summary(m.out0)
+```
+
+```{r, echo = F}
+
+# Final Matching Method: 
+
+```
+
+## Results
+
+```{r, echo = F}
+
+fit = lm(
+  win_percent ~ treatment,
+  data = m.data)
+
+summary(fit)
+
+avg_comparisons(fit, variables = "treatment")
+```
+
+## Limitations
+
+Items that are popular for tanks could an issue for win rate. It might be a meta where tank items are strong.
+
+## Conclusion
+
+## Citations
+
+1.  Rosenbaum, Paul R. *Design of Observational Studies*. Springer, 2020.
+
+2.  Rosenbaum, Paul R., and Donald B. Rubin. “The Central Role of the Propensity Score in Observational Studies for Causal Effects.” *Biometrika*, vol. 70, no. 1, Jan. 1983, pp. 41–55. https://doi.org/10.1093/biomet/70.1.41.
+
+3.  Rajeev Dehejia and Sadek Wahba, "Causal Effects in Non-Experimental Studies: Reevaluating the Evaluation of Training Programs," *Journal of the American Statistical Association*, Vol. 94, No. 448 (December 1999), pp. 1053-1062.
+
+4.  Robert Lalonde, "Evaluating the Econometric Evaluations of Training Programs," *American Economic Review*, Vol. 76 (1986), pp. 604-620.
+
+5.  Rajeev Dehejia and Sadek Wahba, "Propensity Score Matching Methods for Non-Experimental Causal Studies," *Review of Economics and Statistics*, Vol. 84, (February 2002), pp. 151-161.
+
+## Supplemental Information
+
+### Data
+
+```{r}
+
+DiagrammeR::grViz("
+digraph ChampionData {
+  graph [bgcolor = gray, rankdir = LR]  // ← This makes layout go left-to-right
+
+  node [shape=plaintext fontname=Helvetica]
+
+  champion_stat [
+    label=<
+      <table border='1' cellborder='0' cellspacing='0'>
+        <tr><td bgcolor='lightblue'><b>champion_stat</b></td></tr>
+        <tr><td><b>Name</b> (PK)</td></tr>
+        <tr><td>Tags</td></tr>
+        <tr><td>Role</td></tr>
+        <tr><td>Range type</td></tr>
+        <tr><td>Resource type</td></tr>
+        <tr><td>Base HP</td></tr>
+        <tr><td>HP per lvl</td></tr>
+        <tr><td>Base mana</td></tr>
+        <tr><td>Mana per lvl</td></tr>
+        <tr><td>Movement speed</td></tr>
+        <tr><td>Base armor</td></tr>
+        <tr><td>Armor per lvl</td></tr>
+        <tr><td>Base magic resistance</td></tr>
+        <tr><td>Magic resistance per lvl</td></tr>
+        <tr><td>Attack range</td></tr>
+        <tr><td>HP regeneration</td></tr>
+        <tr><td>HP regeneration per lvl</td></tr>
+        <tr><td>Mana regeneration</td></tr>
+        <tr><td>Mana regeneration per lvl</td></tr>
+        <tr><td>Attack damage</td></tr>
+        <tr><td>Attack damage per lvl</td></tr>
+        <tr><td>Attack speed per lvl</td></tr>
+        <tr><td>Attack speed</td></tr>
+        <tr><td>AS ratio</td></tr>
+      </table>
+    >
+  ]
+
+  champion_outcomes [
+    label=<
+      <table border='1' cellborder='0' cellspacing='0'>
+        <tr><td bgcolor='lightyellow'><b>champion_outcomes</b></td></tr>
+        <tr><td><b>Name</b> (FK)</td></tr>
+        <tr><td>Class</td></tr>
+        <tr><td>Role</td></tr>
+        <tr><td>Tier</td></tr>
+        <tr><td>Score</td></tr>
+        <tr><td>Trend</td></tr>
+        <tr><td>Win %</td></tr>
+        <tr><td>Role %</td></tr>
+        <tr><td>Pick %</td></tr>
+        <tr><td>Ban %</td></tr>
+        <tr><td>KDA</td></tr>
+      </table>
+    >
+  ]
+
+  champion_stat -> champion_outcomes [label='Name']
+}
+")
+```
+
+1.  Legends Stats: S12 data set: <https://www.kaggle.com/datasets/vivovinco/league-of-legends-champion-stats>
+
+2.  League of Legends champions: <https://www.kaggle.com/datasets/cutedango/league-of-legends-champions>
+
+Missing Data that was filled in came frame Wiki League: <https://wiki.leagueoflegends.com/en-us/List_of_champions>
+
+### EDA:
+
+```{r, echo = F}
+# EDA:
+
+## 
+
+League1 = League |> 
+  select(
+    treatment,
+    mana_regeneration,
+    base_hp,
+    attack_range,
+    movement_speed,
+    base_mana,
+    base_armor,
+    resourse_type,
+    hp_regeneration
+  )
+
+## 
+
+GGally::ggpairs(
+  League1,
+  progress = T,
+  )
+
+## 
+
+hist(League$mana_regeneration)
+
+hist(League$base_hp)
+
+hist(League$attack_range)
+
+hist(League$movement_speed)
+
+hist(League$base_mana)
+
+hist(League$hp_regeneration)
+
+## 
+
+League |> 
+  ggplot2::ggplot(
+    aes(
+      x = treatment,
+      y = win_percent
+    )
+  ) + geom_boxplot()
+```
+
+#### Matching Methods
+
+```{r, echo = F}
+
+# 1:1 NN PS matching w/o replacement
+
+m.out1 = matchit(treatment ~ magic_resistance_per_lvl +
+                 base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
+                  data = League,
+                  method = "nearest",
+                  distance = "glm")
+
+summary(m.out1, un = FALSE)
+
+plot(m.out1, type = "jitter", interactive = FALSE)
+
+plot(summary(m.out1))
+
+m.data = match_data(m.out1)
+
+head(m.data)
+```
+
+```{r, echo = F}
+
+# Full matching on a probit PS
+
+m.out2 = MatchIt::matchit(treatment ~ magic_resistance_per_lvl + base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
+                  data = League,
+                  method = "full",
+                  distance = "glm",
+                  link = "probit")
+
+summary(m.out2, un = FALSE)
+
+plot(m.out2, type = "jitter", interactive = FALSE)
+
+plot(summary(m.out2))
+
+m.data2 = match_data(m.out2)
+
+head(m.data2)
+```
+
+```{r, echo = F}
+
+# Optimal matching on a probit PS
+
+m.out3 = MatchIt::matchit(treatment ~ magic_resistance_per_lvl + base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
+                  data = League,
+                  method = "optimal",
+                  distance = "glm",
+                  link = "probit")
+
+summary(m.out3, un = FALSE)
+
+plot(m.out3, type = "jitter", interactive = FALSE)
+
+plot(summary(m.out3))
+
+m.data3 = match_data(m.out3)
+
+head(m.data3)
+```
+
+```{r, echo = F}
+
+# Subclass matching on a probit PS
+
+m.out3 = MatchIt::matchit(treatment ~ magic_resistance_per_lvl + base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
+                  data = League,
+                  method = "subclass",
+                  distance = "glm",
+                  link = "probit")
+
+summary(m.out3, un = FALSE)
+
+plot(m.out3, type = "jitter", interactive = FALSE)
+
+plot(summary(m.out3))
+
+m.data3 = match_data(m.out3)
+
+head(m.data3)
+```
+
+#### Diagnostics
+
+```{r, echo = F}
+
+## Diagnostics
+
+fit = lm(win_percent ~ treatment + mana_regeneration + mana_regeneration + base_hp + attack_range + movement_speed + base_mana + base_armor + resourse_type + hp_regeneration,
+          data = m.data)
+
+plot(fit)
+```
