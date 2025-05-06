@@ -8,17 +8,17 @@ toc: True
 
 # Introduction
 
-In *League of Legends*, the Tank class of champions is frequently the subject of design complaints from players, who often cite frustration over Tanks’ combination of high durability and strong in-game presence. Despite Tanks typically having lower offensive capabilities, their high base defensive stats can make them feel overwhelmingly powerful, especially if they are still able to deal significant damage. This study investigates whether being assigned to the Tank class is associated with an increased champion win rate, after controlling for baseline durability stats such as health and armor. To address potential confounding factors and estimate the causal effect of being a Tank, we introduce and apply Propensity Score Matching (PSM) methods. This approach allows for a more balanced comparison between Tank and non-Tank champions, helping to better isolate the impact of class assignment on competitive success.
+Within the multiplayer online platform League of Legends, champions are divided into distinct classes based upon abilities and purpose. One of those classes, Tanks, is perhaps the most likely class to bear community criticism and design scrutiny. Many players express frustration with playing against them. Citing that despite having diminished offense, they carry high starting endurance values which contribute to their undue strength, specifically where they remain strong despite still capable of inflicting real damage or utility.
 
-For any hypothesis test, an $\alpha =$ is assumed. In the case of multiple testing, correction for mutliple tests will be used.
+This study seeks to answer a key question: Does Tank-class champion status causally increase win rate, after adjusting for baseline strength factors such as health, armor, and resistances? While simple comparisons of win rates between champion classes are confounded by factors, we apply a causal inference strategy to sidestep this challenge.
 
-Software:
+Specifically, we utilize Propensity Scores and Propensity Score Matching (PSM) to equate observed differences in champion statistics. PSM allows for a more accurate comparison by equating Tank and non-Tank champions on relevant covariates and permits us to estimate the Average Treatment Effect (ATE) of Tank status on game outcomes. Our objective is to split out the impact of class designation from other traits that independently affect win rate, thereby offering insight into whether or not Tanks are objectively privileged in competitive play.
 
-R version 4.4.1 (2024-06-14)
+All statistical analyses were performed using R (version 4.4.1), and a significance level of α = 0.05 was used for hypothesis testing. The hypothesis testing framework we decided to work with was the Neyman-Pearson Framework.
 
 ## Propensity Score
 
-A propensity score is the conditional probability that a subject receives the treatment, given their observed characteristics (covariates) x. Written as, $P(Z = 1 | x)$ where Z is the label for what treatment someone was assigned to. Formally, if we consider a group (or "stratum") s with $n_{s}$ individuals, and each individual i has a treatment probability $\pi_{si}$, then the average probability across the group is:
+A propensity score is the conditional probability that a subject receives the treatment, given their observed characteristics (covariates) x \[2, pg 201 - 202\]. Written as, $P(Z = 1 | x)$ where Z is the label for what treatment someone was assigned to. Formally, if we consider a group s with $n_{s}$ individuals, and each individual i has a treatment probability $\pi_{si}$, then the average probability across the group is:
 
 $\lambda(x_{s}) = \frac{1}{n} \sum_{i = 1} \pi_{si}$
 
@@ -26,9 +26,7 @@ Here, $\lambda(x_s)$ is the overall chance that a randomly selected subject from
 
 Think of a propensity score as a way to summarize, in one number, how likely someone is to get a treatment based on their background information. Instead of looking at all their details separately, we bundle it into a single probability. Imagine, "given who you are, there's a 70% chance you would have been treated." Now, we don't have to try and make comparable groups based on background information, now we can just focus on matching propensity score values.
 
-Origin?
-
-Paul Rosenbaum and Donald Rubin
+-   add a comment about Origin and Paul Rosenbaum and Donald Rubin
 
 ### Motivation
 
@@ -38,7 +36,7 @@ Now, consider if we could replicate this mechanism in an observational study - c
 
 ### Propensity Score Matching
 
-Using Propensity Scores
+To demonstrate Propenisty Scores in action, we will follow the work flow and example provided by Noah Greifer on what's called, Propensity Score Matching, using his MatchIt library.
 
 One of the most popular R package
 
@@ -50,28 +48,40 @@ One of the most popular R package
 
 # Libraries
 
-library(tidyverse)  # dplyr, ggplot 
-library(GGally)     # ggpairs 
-library(MatchIt)    # matchit, lalonde data set 
-library(readr)      # read csv 
-library(dagitty)    # DAG 
-library(DiagrammeR) # Identity
-library(tinytable)  # table
+library(tidyverse)      # dplyr, ggplot 
+library(GGally)         # ggpairs 
+library(MatchIt)        # matchit, lalonde data set 
+library(readr)          # read csv 
+library(dagitty)        # DAG 
+library(DiagrammeR)     # Identity
+library(tinytable)      # table
 library(marginaleffects)
 library(optmatch)
+
+library(cobalt)         # loveplot
+library(pwr)            # power analysis
 ```
+
+In the tutorial, Greifer uses the Lalonde Data set, which is a subset of data sets from the National Supported Work Demonstration used by Dehejia and Wahba to evaluate propensity score matching methods. A table of the first few rows is provided below:
 
 ```{r, echo = F}
 
 tinytable::tt(lalonde[1:8, 1:8])
 ```
 
+The workflow consistents of, selecting the type of effect to be estimated, selecting the target population to which the treatment effect is to generalize, selecting the matching algorithm, and selecting the covariates for which balance is required for an unbiased estimate of the treatment effect.
+
+First, we check for initial imbalances in the lalonde data set (this is prior to any matching):
+
 ```{r, echo = F}
-# No matching; constructing a pre-match matchit object
+
+df = lalonde
+
+# No matching
 
 m.out0 = matchit(treat ~ age + educ + race + married + 
                     nodegree + re74 + re75,
-                  data = lalonde,
+                  data = df,
                   method = NULL,
                   distance = "glm")
 
@@ -80,97 +90,40 @@ m.out0 = matchit(treat ~ age + educ + race + married +
 summary(m.out0)
 ```
 
+Looking at the Std. Mean Diff column, we notice quite a few covariate values that are far from 0 (values closer to 0 indicate good balance).
+
+Now, we preform propensity score matching, deploying the 1:1 nearest neighbor algorithm. Looking again at the Std. Mean Diff column, we notice quite a few more covariates have scores closer to 0, indicating good balance.
+
 ```{r, echo = F}
 
 # 1:1 NN PS matching w/o replacement
 
 m.out1 = matchit(treat ~ age + educ + race + married + 
                     nodegree + re74 + re75,
-                  data = lalonde,
+                  data = df,
                   method = "nearest",
                   distance = "glm")
 
 # Checking balance after NN matching
 
 summary(m.out1, un = FALSE)
+```
+
+Additionally, we can view the matching using plots. The last plot being what's called a Love plot. You can visually see
+
+```{r, echo = F}
 
 plot(m.out1, type = "jitter", interactive = FALSE)
 
 plot(m.out1, type = "density", interactive = FALSE,
-     which.xs = ~age + married + re75)
+     which.xs = ~ age + married + re75)
 
 plot(summary(m.out1))
 ```
 
-## Methods
-
--   Estimand: $ATE = E[Y(i =1) - Y(i = 0)]$ where $Y(i = 1)$ = win rate if the champion were a Tank and $Y( i = 0)$ = win rate if the champion were not a Tank.
-
--   Target Population: League of Legends Champions
-
--   Matching Method Discussion
-
-## Assumptions:
-
-```{r, echo = F}
-
-# DAG
-
-causal_diagram1 = dagitty::dagitty('dag {
-bb="0,0,1,1"
-"Win Rate" [outcome,pos="0.824,0.612"]
-"armor per lvl" [pos="0.631,0.344"]
-"attack damage" [pos="0.496,0.756"]
-"attack speed" [pos="0.501,0.680"]
-"base armor" [pos="0.272,0.263"]
-"base hp" [pos="0.499,0.237"]
-"base magic resistance" [pos="0.379,0.869"]
-"hp per lvl" [pos="0.424,0.352"]
-"hp regeneration" [pos="0.660,0.198"]
-"magic resistance per lvl" [pos="0.240,0.389"]
-"movement speed" [pos="0.279,0.093"]
-"resource type" [pos="0.527,0.468"]
-Class [exposure,pos="0.192,0.619"]
-"armor per lvl" -> "Win Rate"
-"armor per lvl" -> Class
-"attack damage" -> "Win Rate"
-"attack damage" -> Class
-"attack speed" -> "Win Rate"
-"attack speed" -> Class
-"base armor" -> "Win Rate"
-"base armor" -> Class
-"base hp" -> "Win Rate"
-"base hp" -> Class
-"base magic resistance" -> "Win Rate"
-"base magic resistance" -> Class
-"hp per lvl" -> "Win Rate"
-"hp per lvl" -> Class
-"hp regeneration" -> "Win Rate"
-"hp regeneration" -> Class
-"magic resistance per lvl" -> "Win Rate"
-"magic resistance per lvl" -> Class
-"movement speed" -> "Win Rate"
-"movement speed" -> Class
-"resource type" -> "Win Rate"
-"resource type" -> Class
- }
-
-')
-
-# Plot DAG
-
-plot(causal_diagram1)
-```
-
--   Unconfoundedness
-
--   Positivity
-
--   SUTVA
-
 ## Data Pre-Processing
 
-```{r, echo = F}
+```{r, include = F}
 
 # Data Pre-Processing of champion stats and champion outcomes
 
@@ -245,7 +198,7 @@ League = League |>
 ## Fill in missing values for Nunu from wiki league
 
 League = League |>
-  mutate(
+  dplyr::mutate(
     class = ifelse(name == "Nunu & Willump" & is.na(class), "Tank", class),
     role.x = ifelse(name == "Nunu & Willump" & is.na(role.x), "JUNGLE", role.x),
     tier = ifelse(name == "Nunu & Willump" & is.na(tier), "A", tier),
@@ -262,7 +215,7 @@ League = League |>
 ## Fill in missing values
 
 League = League |>
-  mutate(
+  dplyr::mutate(
     resourse_type = ifelse(name == "Dr. Mundo" & is.na(resourse_type), "Health", resourse_type),
     resourse_type = ifelse(name == "Garen" & is.na(resourse_type), 0, resourse_type),
     resourse_type = ifelse(name == "Katarina" & is.na(resourse_type), 0, resourse_type),
@@ -272,10 +225,10 @@ League = League |>
     class = ifelse(name == "Lillia" & is.na(class), "Mage", class)
   )
 
-# view(
-#   League |> 
-#     filter(if_any(everything(), is.na))
-# ) # empty
+view(
+   League |>
+     filter(if_any(everything(), is.na))
+ ) # empty
 
 ## create a new field for Treatment Assignment. Tank = 1, Non-Tank = 0
 
@@ -289,11 +242,114 @@ League = League |>
 League$win_percent = as.numeric(sub("%","",League$win_percent) ) / 100
 
 League$pick_percent = as.numeric(sub("%","",League$pick_percent) ) / 100
+```
+
+```{r, echo = F}
 
 ## Show data set
 
 tinytable::tt(League[1:8, 1:35] )
 ```
+
+## Methods
+
+-   Estimand: $ATE = E[Y(i =1) - Y(i = 0)]$ where $Y(i = 1)$ = win rate if the champion were a Tank and $Y( i = 0)$ = win rate if the champion were not a Tank.
+
+-   Target Population: League of Legends Champions
+
+-   Matching Method Discussion
+
+### A Priori Steps for Test:
+
+We define a minimum effect size (MES) of 0.03, corresponding to a 3 percentage point difference in win rate, as the threshold of practical importance in champion balancing. We use a two-tailed t-test to compare matched Tank and non-Tank win rates, with α = 0.05. The null hypothesis ( $H_0 = \mu_{tank} - \mu_{non-tank} = 0$) assumes that the difference in win rates between Tank and non-Tank champions is 0. The alternative hypothesis posits a win rate difference greater than 3 percentage points between Tank and non-Tank champions.
+
+#### Power Analysis:
+
+Using an expected minimum effect size of 3 percentage points (MES = 0.03) and the observed standard deviation of win rates ( $\sigma$ = 0.01656), we calculated that a sample of just 6 champions would provide 80% power to detect such an effect using a two-tailed t-test with $\alpha$ = 0.05.
+
+```{r, echo = F}
+
+# Power Analysis:
+
+# Minimum Effect Size: delta = 0.03
+
+## sd:
+
+sd = sd(League$win_percent) # 0.01656067
+
+## Cohen's d: 
+
+d = 0.03 / sd # 1.811521
+
+
+## Test:
+
+pwr.t.test(
+  d = 1.811,
+  power = 0.80,
+  sig.level = 0.05,
+  type = "two.sample",
+  alternative = "two.sided"
+) # n = 5.919827
+```
+
+## Assumptions:
+
+```{r, echo = F}
+
+# DAG:
+
+causal_diagram1 = dagitty::dagitty('dag {
+bb="0,0,1,1"
+"Win Rate" [outcome,pos="0.824,0.612"]
+"armor per lvl" [pos="0.631,0.344"]
+"attack damage" [pos="0.496,0.756"]
+"attack speed" [pos="0.501,0.680"]
+"base armor" [pos="0.272,0.263"]
+"base hp" [pos="0.499,0.237"]
+"base magic resistance" [pos="0.379,0.869"]
+"hp per lvl" [pos="0.424,0.352"]
+"hp regeneration" [pos="0.660,0.198"]
+"magic resistance per lvl" [pos="0.240,0.389"]
+"movement speed" [pos="0.279,0.093"]
+"resource type" [pos="0.527,0.468"]
+Class [exposure,pos="0.192,0.619"]
+"armor per lvl" -> "Win Rate"
+"armor per lvl" -> Class
+"attack damage" -> "Win Rate"
+"attack damage" -> Class
+"attack speed" -> "Win Rate"
+"attack speed" -> Class
+"base armor" -> "Win Rate"
+"base armor" -> Class
+"base hp" -> "Win Rate"
+"base hp" -> Class
+"base magic resistance" -> "Win Rate"
+"base magic resistance" -> Class
+"hp per lvl" -> "Win Rate"
+"hp per lvl" -> Class
+"hp regeneration" -> "Win Rate"
+"hp regeneration" -> Class
+"magic resistance per lvl" -> "Win Rate"
+"magic resistance per lvl" -> Class
+"movement speed" -> "Win Rate"
+"movement speed" -> Class
+"resource type" -> "Win Rate"
+"resource type" -> Class
+ }
+
+')
+
+# Plot DAG
+
+plot(causal_diagram1)
+```
+
+-   Unconfoundedness
+
+-   Positivity
+
+-   SUTVA
 
 ## Check Imbalances
 
@@ -307,26 +363,96 @@ m.out0 = MatchIt::matchit(treatment ~ mana_regeneration + base_hp + attack_range
                   distance = "glm")
 
 # Checking balance prior to matching
+
 summary(m.out0)
 ```
 
+plot(summary(m.out1))
+
 ```{r, echo = F}
 
-# Final Matching Method: 
+# Final Matching Method: NN
 
+m.out1 = matchit(treatment ~ magic_resistance_per_lvl +
+                 base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
+                  data = League,
+                  method = "nearest",
+                  distance = "glm")
+
+
+plot(m.out1, type = "jitter", interactive = FALSE)
+
+plot(summary(m.out1))
 ```
+
+```{r, include = F}
+
+# Save the matched data: 
+
+m.data = match_data(m.out1)
+
+# head(m.data)
+
+# nrow(m.data) # 56
+
+# nrow(League) # 232
+```
+
+## Model Selection
 
 ## Results
 
+The observed test statistic fell within the acceptance region, and our design had sufficient power to detect a minimum meaningful effect size of 3 percentage points. Therefore, in accordance with the Neyman-Pearson framework, we will act as if the main hypothesis is true, concluding that Tank-class assignment does not meaningfully affect win rate after adjusting for champion stats.
+
 ```{r, echo = F}
 
+# Regression:
+
 fit = lm(
-  win_percent ~ treatment,
+  win_percent ~ treatment + magic_resistance_per_lvl +
+                 base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
   data = m.data)
 
-summary(fit)
+## check summary of regression
 
-avg_comparisons(fit, variables = "treatment")
+summary(fit)$coefficients["treatment1", "Estimate"]
+
+# Removed covariates with match scores that were 0.
+# 
+fit = lm(
+  win_percent ~ treatment + magic_resistance_per_lvl +
+                 base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + attack_speed + attack_damage + base_magic_resistance,
+  data = m.data)
+
+## check summary of regression
+
+summary(fit)$coefficients["treatment1", "Estimate"]
+```
+
+```{r, echo = F}
+
+
+# Extract treatment row only
+treat_row = summary(fit)$coefficients["treatment1", , drop = FALSE]
+
+# Round for presentation
+
+treat_df = as.data.frame(treat_row)
+
+treat_df = round(treat_df, 4)
+
+# Add column for Critical Value (CV = ±2.018 for df = 42, alpha = 0.05 two-tailed)
+
+treat_df$`Critical t-value (±)` = qt(0.975, df = summary_fit$df[2]) |> round(3)
+
+# Rename columns for clarity
+
+colnames(treat_df) = c("Estimate", "Std. Error", "t value", "p-value", "Critical t-value (±)")
+
+# Display table
+
+tinytable::tt(treat_df, caption = "Regression Results for Treatment Effect")
+
 ```
 
 ## Limitations
@@ -339,13 +465,15 @@ Items that are popular for tanks could an issue for win rate. It might be a meta
 
 1.  Rosenbaum, Paul R. *Design of Observational Studies*. Springer, 2020.
 
-2.  Rosenbaum, Paul R., and Donald B. Rubin. “The Central Role of the Propensity Score in Observational Studies for Causal Effects.” *Biometrika*, vol. 70, no. 1, Jan. 1983, pp. 41–55. https://doi.org/10.1093/biomet/70.1.41.
+2.  Rosenbaum, Paul R. Observational Studies. Springer
 
-3.  Rajeev Dehejia and Sadek Wahba, "Causal Effects in Non-Experimental Studies: Reevaluating the Evaluation of Training Programs," *Journal of the American Statistical Association*, Vol. 94, No. 448 (December 1999), pp. 1053-1062.
+3.  Rosenbaum, Paul R., and Donald B. Rubin. “The Central Role of the Propensity Score in Observational Studies for Causal Effects.” *Biometrika*, vol. 70, no. 1, Jan. 1983, pp. 41–55. https://doi.org/10.1093/biomet/70.1.41.
 
-4.  Robert Lalonde, "Evaluating the Econometric Evaluations of Training Programs," *American Economic Review*, Vol. 76 (1986), pp. 604-620.
+4.  Rajeev Dehejia and Sadek Wahba, "Causal Effects in Non-Experimental Studies: Reevaluating the Evaluation of Training Programs," *Journal of the American Statistical Association*, Vol. 94, No. 448 (December 1999), pp. 1053-1062.
 
-5.  Rajeev Dehejia and Sadek Wahba, "Propensity Score Matching Methods for Non-Experimental Causal Studies," *Review of Economics and Statistics*, Vol. 84, (February 2002), pp. 151-161.
+5.  Robert Lalonde, "Evaluating the Econometric Evaluations of Training Programs," *American Economic Review*, Vol. 76 (1986), pp. 604-620.
+
+6.  Rajeev Dehejia and Sadek Wahba, "Propensity Score Matching Methods for Non-Experimental Causal Studies," *Review of Economics and Statistics*, Vol. 84, (February 2002), pp. 151-161.
 
 ## Supplemental Information
 
@@ -424,9 +552,10 @@ Missing Data that was filled in came frame Wiki League: <https://wiki.leagueofle
 ### EDA:
 
 ```{r, echo = F}
+
 # EDA:
 
-## 
+## Isolate variables of interest
 
 League1 = League |> 
   select(
@@ -441,14 +570,14 @@ League1 = League |>
     hp_regeneration
   )
 
-## 
+## Explore variables
 
 GGally::ggpairs(
   League1,
   progress = T,
   )
 
-## 
+## check for outliers and shape of distribution
 
 hist(League$mana_regeneration)
 
@@ -462,7 +591,7 @@ hist(League$base_mana)
 
 hist(League$hp_regeneration)
 
-## 
+## treatment and outcome
 
 League |> 
   ggplot2::ggplot(
@@ -471,9 +600,24 @@ League |>
       y = win_percent
     )
   ) + geom_boxplot()
+
+
+## density curve of treatment and outcome
+## Note: For tanks, most of the data hangs around a 50% win rate.
+
+League |> 
+    ggplot2::ggplot(
+        aes(
+            fill = treatment,
+            x = win_percent
+        )
+    ) +
+    geom_density() 
 ```
 
 #### Matching Methods
+
+Nearest Neighbor
 
 ```{r, echo = F}
 
@@ -496,6 +640,8 @@ m.data = match_data(m.out1)
 head(m.data)
 ```
 
+Full Matching on probit
+
 ```{r, echo = F}
 
 # Full matching on a probit PS
@@ -517,6 +663,8 @@ m.data2 = match_data(m.out2)
 head(m.data2)
 ```
 
+Optimal Matching on probit
+
 ```{r, echo = F}
 
 # Optimal matching on a probit PS
@@ -537,6 +685,8 @@ m.data3 = match_data(m.out3)
 
 head(m.data3)
 ```
+
+Subclass matching on probit
 
 ```{r, echo = F}
 
@@ -563,10 +713,20 @@ head(m.data3)
 
 ```{r, echo = F}
 
-## Diagnostics
+## Diagnostic plots
 
-fit = lm(win_percent ~ treatment + mana_regeneration + mana_regeneration + base_hp + attack_range + movement_speed + base_mana + base_armor + resourse_type + hp_regeneration,
+
+fit = lm(win_percent ~ treatment,
           data = m.data)
 
 plot(fit)
+
+fit1 = lm(win_percent ~ treatment + mana_regeneration + mana_regeneration + base_hp + attack_range + movement_speed + base_mana + base_armor + resourse_type + hp_regeneration,
+          data = m.data)
+
+plot(fit1)
+
+step(fit1)
+
+summary(fit1)$r.squared
 ```
