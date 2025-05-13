@@ -8,7 +8,7 @@ toc: True
 
 # Introduction
 
-Within the multiplayer online platform League of Legends, champions are divided into distinct classes based upon abilities and purpose. One of those classes, Tanks, is perhaps the most likely class to bear community criticism and design scrutiny. Many players express frustration with playing against them. Citing that despite having diminished offense, they carry high starting endurance values which contribute to their undue strength, specifically where they remain strong despite still capable of inflicting real damage or utility.
+Within the multi-player online platform League of Legends, champions are divided into distinct classes based upon abilities and purpose. One of those classes, Tanks, is perhaps the most likely class to bear community criticism and design scrutiny. Many players express frustration with playing against them. Citing that despite having diminished offense, they carry high starting endurance values which contribute to their undue strength, specifically where they remain strong despite still capable of inflicting real damage or utility.
 
 This study seeks to answer a key question: Does Tank-class champion status causally increase win rate, after adjusting for baseline strength factors such as health, armor, and resistances? While simple comparisons of win rates between champion classes are confounded by factors, we apply a causal inference strategy to sidestep this challenge.
 
@@ -18,15 +18,13 @@ All statistical analyses were performed using R (version 4.4.1), and a significa
 
 ## Propensity Score
 
-A propensity score is the conditional probability that a subject receives the treatment, given their observed characteristics (covariates) x \[2, pg 201 - 202\]. Written as, $P(Z = 1 | x)$ where Z is the label for what treatment someone was assigned to. Formally, if we consider a group s with $n_{s}$ individuals, and each individual i has a treatment probability $\pi_{si}$, then the average probability across the group is:
+A propensity score is the conditional probability that a subject receives the treatment, given their observed characteristics (covariates) \[2, pg 201 - 202\]. Written as, $P(Z = 1 | x)$ where Z is the label for what treatment someone was assigned to. Formally, if we consider a group s with $n_{s}$ individuals, and each individual i has a treatment probability $\pi_{si}$, then the average probability across the group is:
 
 $\lambda(x_{s}) = \frac{1}{n} \sum_{i = 1} \pi_{si}$
 
 Here, $\lambda(x_s)$ is the overall chance that a randomly selected subject from stratum s receives the treatment. This value always lies between 0 and 1.
 
-Think of a propensity score as a way to summarize, in one number, how likely someone is to get a treatment based on their background information. Instead of looking at all their details separately, we bundle it into a single probability. Imagine, "given who you are, there's a 70% chance you would have been treated." Now, we don't have to try and make comparable groups based on background information, now we can just focus on matching propensity score values.
-
--   add a comment about Origin and Paul Rosenbaum and Donald Rubin
+Think of a propensity score as a way to summarize, in one number, how likely someone is to get a treatment based on their background information. Instead of looking at all their details separately, we bundle it into a single probability. Imagine, "given who you are, there's a 70% chance you would have been treated." Now, we don't have to try and make comparable groups based on background information, now we can just focus on matching propensity score values. For more information on Propensity Scores, the standard paper is the influential paper by Rosenbaum and Rubin \[3\].
 
 ### Motivation
 
@@ -34,15 +32,11 @@ In the design of experiments, *randomization* plays a central role. It is differ
 
 Now, consider if we could replicate this mechanism in an observational study - creating groups of subjects who have similar probabilities of receiving treatment. Under a key assumption known as *strong ignorability*, we can approximate the conditions of a randomized experiment. If strong ignorability holds, the estimated Average Treatment Effect (ATE) from the observational study would also be unbiased.
 
+Propensity Score Matching (PSM) is a somewhat controversial method. The debate arises from statisticians' concerns about its misuse, similar to criticisms of how confidence intervals or p-values are sometimes misinterpreted, particularly in fields like epidemiology. Some critics argue that PSM should be abandoned altogether, with King et al. (2019) \[4\] being a key reference for this stance. For a balanced perspective, Senn et al. (2007) \[5\] offers a less critical comparison between PSM and standard covariate adjustment. Additionally, those interested in a defense of PSM, including a direct response to King et al., may find further insights in Wan 2025 \[6\].
+
 ### Propensity Score Matching
 
 To demonstrate Propenisty Scores in action, we will follow the work flow and example provided by Noah Greifer on what's called, Propensity Score Matching, using his MatchIt library.
-
-One of the most popular R package
-
-<https://cran.r-project.org/web/packages/MatchIt/vignettes/MatchIt.html>
-
-<https://cran.r-project.org/web/packages/MatchIt/vignettes/matching-methods.html>
 
 ```{r, include = F, warning = F}
 
@@ -55,9 +49,7 @@ library(readr)          # read csv
 library(dagitty)        # DAG 
 library(DiagrammeR)     # Identity
 library(tinytable)      # table
-library(marginaleffects)
 library(optmatch)
-
 library(cobalt)         # loveplot
 library(pwr)            # power analysis
 ```
@@ -66,7 +58,7 @@ In the tutorial, Greifer uses the Lalonde Data set, which is a subset of data se
 
 ```{r, echo = F}
 
-tinytable::tt(lalonde[1:8, 1:8])
+tinytable::tt(lalonde[1:8, 1:8], format = "markdown")
 ```
 
 The workflow consistents of, selecting the type of effect to be estimated, selecting the target population to which the treatment effect is to generalize, selecting the matching algorithm, and selecting the covariates for which balance is required for an unbiased estimate of the treatment effect.
@@ -109,7 +101,7 @@ m.out1 = matchit(treat ~ age + educ + race + married +
 summary(m.out1, un = FALSE)
 ```
 
-Additionally, we can view the matching using plots. The last plot being what's called a Love plot. You can visually see
+Additionally, we can view the matching using plots. The last plot being what's called a Love plot.
 
 ```{r, echo = F}
 
@@ -120,8 +112,6 @@ plot(m.out1, type = "density", interactive = FALSE,
 
 plot(summary(m.out1))
 ```
-
-## Data Pre-Processing
 
 ```{r, include = F}
 
@@ -167,7 +157,7 @@ League = full_join(
 ## Filter out new champions with missing outcome data
 
 League = League |> 
-    filter(
+    dplyr::filter(
         !(name %in% c(
             "Bel'Veth",
             "Briar",
@@ -225,15 +215,10 @@ League = League |>
     class = ifelse(name == "Lillia" & is.na(class), "Mage", class)
   )
 
-view(
-   League |>
-     filter(if_any(everything(), is.na))
- ) # empty
-
 ## create a new field for Treatment Assignment. Tank = 1, Non-Tank = 0
 
 League = League |> 
-  mutate(
+  dplyr::mutate(
     treatment = as.factor(ifelse(class == "Tank",1,0) )
   )
 
@@ -244,6 +229,10 @@ League$win_percent = as.numeric(sub("%","",League$win_percent) ) / 100
 League$pick_percent = as.numeric(sub("%","",League$pick_percent) ) / 100
 ```
 
+## Data Frame
+
+Data for League of Legend Champion Features for Season 12 were extracted from two data sets that were joined on Champion name. Here we show the first few rows and columns of the joined data frame.
+
 ```{r, echo = F}
 
 ## Show data set
@@ -253,11 +242,15 @@ tinytable::tt(League[1:8, 1:35] )
 
 ## Methods
 
--   Estimand: $ATE = E[Y(i =1) - Y(i = 0)]$ where $Y(i = 1)$ = win rate if the champion were a Tank and $Y( i = 0)$ = win rate if the champion were not a Tank.
+```{r, include = F}
 
--   Target Population: League of Legends Champions
-
--   Matching Method Discussion
+# Note:
+# - Estimand: $ATE = E[Y(i =1) - Y(i = 0)]$ where $Y(i = 1)$ = win rate if the champion were a Tank and $Y( i = 0)$ = win rate if the champion were not a Tank.
+# 
+# - Target Population: League of Legends Champions
+# 
+# - Matching Method Discussion
+```
 
 ### A Priori Steps for Test:
 
@@ -284,7 +277,7 @@ d = 0.03 / sd # 1.811521
 
 ## Test:
 
-pwr.t.test(
+pwr::pwr.t.test(
   d = 1.811,
   power = 0.80,
   sig.level = 0.05,
@@ -295,61 +288,55 @@ pwr.t.test(
 
 ## Assumptions:
 
+We provide the reader with the causal mechanisms behind how Champion Class selection can cause win rate. Some Causal Assumptions we make are, Stable Unit Treatment Value, Conditional Ignorability, and Postivity.
+
 ```{r, echo = F}
 
 # DAG:
 
-causal_diagram1 = dagitty::dagitty('dag {
-bb="0,0,1,1"
-"Win Rate" [outcome,pos="0.824,0.612"]
-"armor per lvl" [pos="0.631,0.344"]
-"attack damage" [pos="0.496,0.756"]
-"attack speed" [pos="0.501,0.680"]
-"base armor" [pos="0.272,0.263"]
-"base hp" [pos="0.499,0.237"]
-"base magic resistance" [pos="0.379,0.869"]
-"hp per lvl" [pos="0.424,0.352"]
-"hp regeneration" [pos="0.660,0.198"]
-"magic resistance per lvl" [pos="0.240,0.389"]
-"movement speed" [pos="0.279,0.093"]
-"resource type" [pos="0.527,0.468"]
-Class [exposure,pos="0.192,0.619"]
-"armor per lvl" -> "Win Rate"
-"armor per lvl" -> Class
-"attack damage" -> "Win Rate"
-"attack damage" -> Class
-"attack speed" -> "Win Rate"
-"attack speed" -> Class
-"base armor" -> "Win Rate"
-"base armor" -> Class
-"base hp" -> "Win Rate"
-"base hp" -> Class
-"base magic resistance" -> "Win Rate"
-"base magic resistance" -> Class
-"hp per lvl" -> "Win Rate"
-"hp per lvl" -> Class
-"hp regeneration" -> "Win Rate"
-"hp regeneration" -> Class
-"magic resistance per lvl" -> "Win Rate"
-"magic resistance per lvl" -> Class
-"movement speed" -> "Win Rate"
-"movement speed" -> Class
-"resource type" -> "Win Rate"
-"resource type" -> Class
- }
-
-')
+causal_diagram1 <- dagitty::dagitty('dag {
+  bb="0,0,1,1"
+  Class [exposure, pos="0.5,0.7"]
+  "Win Rate" [outcome, pos="0.5,0.3"]
+  "movement speed" [pos="0.2,0.1"]
+  "base armor" [pos="0.3,0.2"]
+  "hp per lvl" [pos="0.4,0.1"]
+  "base hp" [pos="0.7,0.2"]
+  "hp regeneration" [pos="0.8,0.1"]
+  "armor per lvl" [pos="0.3,0.4"]
+  "resource type" [pos="0.6,0.4"]
+  "magic resistance per lvl" [pos="0.4,0.5"]
+  "attack speed" [pos="0.6,0.6"]
+  "attack damage" [pos="0.7,0.5"]
+  "base magic resistance" [pos="0.8,0.4"]
+  "movement speed" -> Class
+  "movement speed" -> "Win Rate"
+  "base armor" -> Class
+  "base armor" -> "Win Rate"
+  "hp per lvl" -> Class
+  "hp per lvl" -> "Win Rate"
+  "base hp" -> Class
+  "base hp" -> "Win Rate"
+  "hp regeneration" -> Class
+  "hp regeneration" -> "Win Rate"
+  "armor per lvl" -> Class
+  "armor per lvl" -> "Win Rate"
+  "resource type" -> Class
+  "resource type" -> "Win Rate"
+  "magic resistance per lvl" -> Class
+  "magic resistance per lvl" -> "Win Rate"
+  "attack speed" -> Class
+  "attack speed" -> "Win Rate"
+  "attack damage" -> Class
+  "attack damage" -> "Win Rate"
+  "base magic resistance" -> Class
+  "base magic resistance" -> "Win Rate"
+}')
 
 # Plot DAG
 
 plot(causal_diagram1)
 ```
-
--   Unconfoundedness
-
--   Positivity
-
--   SUTVA
 
 ## Check Imbalances
 
@@ -367,13 +354,11 @@ m.out0 = MatchIt::matchit(treatment ~ mana_regeneration + base_hp + attack_range
 summary(m.out0)
 ```
 
-plot(summary(m.out1))
-
 ```{r, echo = F}
 
 # Final Matching Method: NN
 
-m.out1 = matchit(treatment ~ magic_resistance_per_lvl +
+m.out1 = MatchIt::matchit(treatment ~ magic_resistance_per_lvl +
                  base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
                   data = League,
                   method = "nearest",
@@ -398,11 +383,9 @@ m.data = match_data(m.out1)
 # nrow(League) # 232
 ```
 
-## Model Selection
-
 ## Results
 
-The observed test statistic fell within the acceptance region, and our design had sufficient power to detect a minimum meaningful effect size of 3 percentage points. Therefore, in accordance with the Neyman-Pearson framework, we will act as if the main hypothesis is true, concluding that Tank-class assignment does not meaningfully affect win rate after adjusting for champion stats.
+Under our pre-specified decision rule, with a test that had sufficient power to detect a minimum meaningful effect size of 3 percentage points, the observed test statistic fell within the acceptance region.. Therefore, in accordance with the above framework, we will behave as if the main hypothesis is true, that Tank-class assignment does not meaningfully affect win rate after adjusting for champion stats. Had Tanks truly conferred such an advantage, we should have observed a more extreme result. We will add these results to our background knowledge for future studies.
 
 ```{r, echo = F}
 
@@ -415,24 +398,24 @@ fit = lm(
 
 ## check summary of regression
 
-summary(fit)$coefficients["treatment1", "Estimate"]
+# summary(fit)$coefficients["treatment1", "Estimate"]
+# 0.00229587
 
 # Removed covariates with match scores that were 0.
-# 
+
 fit = lm(
   win_percent ~ treatment + magic_resistance_per_lvl +
                  base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + attack_speed + attack_damage + base_magic_resistance,
   data = m.data)
 
-## check summary of regression
-
-summary(fit)$coefficients["treatment1", "Estimate"]
+# summary(fit)$coefficients["treatment1", "Estimate"] 
+# 0.002537454
 ```
 
 ```{r, echo = F}
 
-
 # Extract treatment row only
+
 treat_row = summary(fit)$coefficients["treatment1", , drop = FALSE]
 
 # Round for presentation
@@ -441,124 +424,50 @@ treat_df = as.data.frame(treat_row)
 
 treat_df = round(treat_df, 4)
 
-# Add column for Critical Value (CV = ±2.018 for df = 42, alpha = 0.05 two-tailed)
+# Add column for Critical Value
 
-treat_df$`Critical t-value (±)` = qt(0.975, df = summary_fit$df[2]) |> round(3)
+treat_df$`Critical t-value` = 2.018
 
-# Rename columns for clarity
+# Rename columns
 
-colnames(treat_df) = c("Estimate", "Std. Error", "t value", "p-value", "Critical t-value (±)")
+colnames(treat_df) = c("Estimate",
+                       "Std. Error",
+                       "t value",
+                       "p-value",
+                       "Critical t-value")
 
 # Display table
 
-tinytable::tt(treat_df, caption = "Regression Results for Treatment Effect")
+tinytable::tt(treat_df)
 
 ```
 
-## Limitations
+## Limitations(In Progress)
 
-Items that are popular for tanks could an issue for win rate. It might be a meta where tank items are strong.
+There were some unobserved variables that could contribute to biasing my effect to some level. For example, data on Champion Items was not included and we believe that this variable would have a large positive effect specifically for tanks during certain seasons where Tank items are strong. Throughout the game, players need to purchase items for their champions to get stronger and there have been seasons where certain classes would benefit from item changes more than others. Another would be the Rank of the Win Rate. There are several Ranks within League of Legends. Given some of these limitations, Conditional Ignorability is harder to justify here.
 
-## Conclusion
-
-## Citations
-
-1.  Rosenbaum, Paul R. *Design of Observational Studies*. Springer, 2020.
-
-2.  Rosenbaum, Paul R. Observational Studies. Springer
-
-3.  Rosenbaum, Paul R., and Donald B. Rubin. “The Central Role of the Propensity Score in Observational Studies for Causal Effects.” *Biometrika*, vol. 70, no. 1, Jan. 1983, pp. 41–55. https://doi.org/10.1093/biomet/70.1.41.
-
-4.  Rajeev Dehejia and Sadek Wahba, "Causal Effects in Non-Experimental Studies: Reevaluating the Evaluation of Training Programs," *Journal of the American Statistical Association*, Vol. 94, No. 448 (December 1999), pp. 1053-1062.
-
-5.  Robert Lalonde, "Evaluating the Econometric Evaluations of Training Programs," *American Economic Review*, Vol. 76 (1986), pp. 604-620.
-
-6.  Rajeev Dehejia and Sadek Wahba, "Propensity Score Matching Methods for Non-Experimental Causal Studies," *Review of Economics and Statistics*, Vol. 84, (February 2002), pp. 151-161.
+## Conclusion(In Progress)
 
 ## Supplemental Information
 
-### Data
-
-```{r}
-
-DiagrammeR::grViz("
-digraph ChampionData {
-  graph [bgcolor = gray, rankdir = LR]  // ← This makes layout go left-to-right
-
-  node [shape=plaintext fontname=Helvetica]
-
-  champion_stat [
-    label=<
-      <table border='1' cellborder='0' cellspacing='0'>
-        <tr><td bgcolor='lightblue'><b>champion_stat</b></td></tr>
-        <tr><td><b>Name</b> (PK)</td></tr>
-        <tr><td>Tags</td></tr>
-        <tr><td>Role</td></tr>
-        <tr><td>Range type</td></tr>
-        <tr><td>Resource type</td></tr>
-        <tr><td>Base HP</td></tr>
-        <tr><td>HP per lvl</td></tr>
-        <tr><td>Base mana</td></tr>
-        <tr><td>Mana per lvl</td></tr>
-        <tr><td>Movement speed</td></tr>
-        <tr><td>Base armor</td></tr>
-        <tr><td>Armor per lvl</td></tr>
-        <tr><td>Base magic resistance</td></tr>
-        <tr><td>Magic resistance per lvl</td></tr>
-        <tr><td>Attack range</td></tr>
-        <tr><td>HP regeneration</td></tr>
-        <tr><td>HP regeneration per lvl</td></tr>
-        <tr><td>Mana regeneration</td></tr>
-        <tr><td>Mana regeneration per lvl</td></tr>
-        <tr><td>Attack damage</td></tr>
-        <tr><td>Attack damage per lvl</td></tr>
-        <tr><td>Attack speed per lvl</td></tr>
-        <tr><td>Attack speed</td></tr>
-        <tr><td>AS ratio</td></tr>
-      </table>
-    >
-  ]
-
-  champion_outcomes [
-    label=<
-      <table border='1' cellborder='0' cellspacing='0'>
-        <tr><td bgcolor='lightyellow'><b>champion_outcomes</b></td></tr>
-        <tr><td><b>Name</b> (FK)</td></tr>
-        <tr><td>Class</td></tr>
-        <tr><td>Role</td></tr>
-        <tr><td>Tier</td></tr>
-        <tr><td>Score</td></tr>
-        <tr><td>Trend</td></tr>
-        <tr><td>Win %</td></tr>
-        <tr><td>Role %</td></tr>
-        <tr><td>Pick %</td></tr>
-        <tr><td>Ban %</td></tr>
-        <tr><td>KDA</td></tr>
-      </table>
-    >
-  ]
-
-  champion_stat -> champion_outcomes [label='Name']
-}
-")
-```
+### Data Sets
 
 1.  Legends Stats: S12 data set: <https://www.kaggle.com/datasets/vivovinco/league-of-legends-champion-stats>
 
 2.  League of Legends champions: <https://www.kaggle.com/datasets/cutedango/league-of-legends-champions>
 
-Missing Data that was filled in came frame Wiki League: <https://wiki.leagueoflegends.com/en-us/List_of_champions>
+3.  Missing Data that was filled in came frame Wiki League: <https://wiki.leagueoflegends.com/en-us/List_of_champions>
 
 ### EDA:
 
-```{r, echo = F}
+```{r, echo = F, warning = F}
 
 # EDA:
 
 ## Isolate variables of interest
 
 League1 = League |> 
-  select(
+  dplyr::select(
     treatment,
     mana_regeneration,
     base_hp,
@@ -617,13 +526,13 @@ League |>
 
 #### Matching Methods
 
-Nearest Neighbor
+**Nearest Neighbor**
 
 ```{r, echo = F}
 
 # 1:1 NN PS matching w/o replacement
 
-m.out1 = matchit(treatment ~ magic_resistance_per_lvl +
+m.out1 = MatchIt::matchit(treatment ~ magic_resistance_per_lvl +
                  base_armor + movement_speed + hp_per_lvl + base_hp + hp_regeneration + armor_per_lvl + resourse_type + attack_speed + attack_damage + base_magic_resistance,
                   data = League,
                   method = "nearest",
@@ -635,12 +544,12 @@ plot(m.out1, type = "jitter", interactive = FALSE)
 
 plot(summary(m.out1))
 
-m.data = match_data(m.out1)
+# m.data = match_data(m.out1)
 
-head(m.data)
+# head(m.data)
 ```
 
-Full Matching on probit
+**Full Matching on probit**
 
 ```{r, echo = F}
 
@@ -658,12 +567,12 @@ plot(m.out2, type = "jitter", interactive = FALSE)
 
 plot(summary(m.out2))
 
-m.data2 = match_data(m.out2)
+# m.data2 = match_data(m.out2)
 
-head(m.data2)
+# head(m.data2)
 ```
 
-Optimal Matching on probit
+**Optimal Matching on probit**
 
 ```{r, echo = F}
 
@@ -681,12 +590,12 @@ plot(m.out3, type = "jitter", interactive = FALSE)
 
 plot(summary(m.out3))
 
-m.data3 = match_data(m.out3)
+# m.data3 = match_data(m.out3)
 
-head(m.data3)
+# head(m.data3)
 ```
 
-Subclass matching on probit
+**Subclass matching on probit**
 
 ```{r, echo = F}
 
@@ -704,9 +613,9 @@ plot(m.out3, type = "jitter", interactive = FALSE)
 
 plot(summary(m.out3))
 
-m.data3 = match_data(m.out3)
+# m.data3 = match_data(m.out3)
 
-head(m.data3)
+# head(m.data3)
 ```
 
 #### Diagnostics
@@ -714,7 +623,6 @@ head(m.data3)
 ```{r, echo = F}
 
 ## Diagnostic plots
-
 
 fit = lm(win_percent ~ treatment,
           data = m.data)
@@ -730,3 +638,17 @@ step(fit1)
 
 summary(fit1)$r.squared
 ```
+
+## Citations
+
+1.  Rosenbaum, Paul R. *Design of Observational Studies*. Springer, 2020.
+
+2.  Rosenbaum, Paul R. Observational Studies. Springer
+
+3.  Rosenbaum, Paul R., and Donald B. Rubin. “The Central Role of the Propensity Score in Observational Studies for Causal Effects.” *Biometrika*, vol. 70, no. 1, Jan. 1983, pp. 41–55. https://doi.org/10.1093/biomet/70.1.41.
+
+4.  King, Gary, and Richard Nielsen. “Why Propensity Scores Should Not Be Used for Matching.” *Political Analysis*, vol. 27, no. 4, 2019, gking.harvard.edu/publications/why-propensity-scores-should-not-be-used-formatching.
+
+5.  Senn, Stephen, et al. “Stratification for the Propensity Score Compared with Linear Regression Techniques to Assess the Effect of Treatment or Exposure.” *Statistics in Medicine*, vol. 26, no. 30, 3 Dec. 2007, pp. 5529–5544, https://doi.org/10.1002/sim.3133. Accessed 11 Oct. 2020.
+
+6.  Wan, Fei. “Propensity Score Matching: Should We Use It in Designing Observational Studies?” *BMC Medical Research Methodology*, vol. 25, no. 1, 29 Jan. 2025, https://doi.org/10.1186/s12874-025-02481-w.
